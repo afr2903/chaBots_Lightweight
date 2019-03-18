@@ -1,15 +1,19 @@
 #include<EEPROM.h>
 #include "I2Cdev.h"
-#include "HMC5883L.h"
 #include <HTInfraredSeeker.h>
-HMC5883L mag;
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include <utility/imumaths.h>
+  
+Adafruit_BNO055 bno = Adafruit_BNO055(55);
+sensors_event_t event;
 
-int16_t mx, my, mz;
 int dir=0, last_pos=0, dis_back=60;
 float a,b,c, x;
 float r, h=10, w=135;
-bool st, out;
-float deg=0, pk=2.5, ps=.5;
+bool st, out=0, aligned=0;
+float deg=0, pk=3.5, ps=.5;
 float zero=0.00f, current;
 
 int trig[]= {0, 42, 35,5};
@@ -19,7 +23,7 @@ int us[3];
 bool line_detected;
 long long begin_time=0;
 
-int ir[]={150,265,265,265,265,0,95,95,95,95};
+int ir[]={150,270,270,270,270,0,90,90,90,90};
 int line[10];
 
 void mov(int pwm, int strength, int dir){
@@ -40,8 +44,8 @@ void mov(int pwm, int strength, int dir){
   st? b+=deg : b-=deg;
   b-=strength*ps;
   b=min(max(b,5),255);
-  analogWrite(2,st*b);
-  analogWrite(3,(!st)*b);
+  analogWrite(3,st*b);
+  analogWrite(2,(!st)*b);
   
   c>0? st=0: st=1;
   c=abs(c);
@@ -84,17 +88,13 @@ void us_back(){
   us[3]= us[3]/29/2;
 }
 void mag_read(){
-  mag.getHeading(&mx, &my, &mz);
-  float heading = atan2(my, mx);
-  if(heading<0) heading+= 2*M_PI;
-  if(analogRead(1)) reset(heading);
-  heading=heading * 180/M_PI; 
-  current= heading;
-  deg = current-zero;
+  bno.getEvent(&event);
+  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+  deg= euler.x();
+
   if(deg<0) deg+=360;
   if(deg>180) deg-=360;
   Serial.print(deg);
-  Serial.print('\t');
 }
 void nothing(){
   int dif=0;
@@ -106,24 +106,6 @@ void nothing(){
     Serial.print(us[1]);
     Serial.print("\t");
     Serial.println(us[2]);
-    /*if(us[1]+us[2]<w){
-      Serial.println(":v");
-      //align();
-      us_back();
-      Serial.println(us[3]);
-      dir=180;
-      if(us[3]>dis_back){
-        Serial.println("v:<<<<");
-        mov(180,0,dir);
-      }
-      else{
-        Serial.println(">>>:v");
-        dir=45;
-        turnoff();
-        break; 
-      }
-      continue;
-    }*/
     if(us[1]+us[2]<w)break;
     if(abs(us[1]-us[2])<10) break;
     dir= us[1]<us[2]? 90:270;
@@ -146,8 +128,8 @@ void align(){
     deg=min(deg,255);
     analogWrite(7,st*deg);
     analogWrite(6,(!st)*deg);
-    analogWrite(2,st*deg);
-    analogWrite(3,(!st)*deg);
+    analogWrite(3,st*deg);
+    analogWrite(2,(!st)*deg);
     analogWrite(13,st*deg);
     analogWrite(12,(!st)*deg);
   }
@@ -170,8 +152,8 @@ void getOut(){
   b>0? st=0: st=1;
   b=abs(b);
   b=min(max(b,0),255);
-  analogWrite(2,st*b);
-  analogWrite(3,(!st)*b);
+  analogWrite(3,st*b);
+  analogWrite(2,(!st)*b);
   
   c>0? st=0: st=1;
   c=abs(c);
@@ -181,13 +163,11 @@ void getOut(){
 }
 
 void setup() {
-  EEPROM.get(0,zero);
   Wire.begin();
   Serial.begin(9600);
-  mag.initialize();
+  bno.begin();
   InfraredSeeker::Initialize();
-  
-  zero*=180/M_PI;
+  bno.setExtCrystalUse(true);
 
   pinMode(A1,INPUT);
   
@@ -215,21 +195,22 @@ void setup() {
   for(int i=1; i<=3; i++) pinMode(trig[i],OUTPUT);
   for(int i=1; i<=3; i++) pinMode(echo[i],INPUT);
    
-  digitalWrite(44,0);
-  digitalWrite(46,1); //Left
-  digitalWrite(48,1);
+  digitalWrite(44,1);
+  digitalWrite(46,0); //Left
+  digitalWrite(48,0);
   
-  digitalWrite(39,1);
-  digitalWrite(41,1); //Middle
-  digitalWrite(43,0);
+  digitalWrite(39,0);
+  digitalWrite(41,0); //Middle
+  digitalWrite(43,1);
   
-  digitalWrite(47,1);
-  digitalWrite(49,1); //Right
-  digitalWrite(53,0);
+  digitalWrite(47,0);
+  digitalWrite(49,0); //Right
+  digitalWrite(53,1);
 }
 
 
 void loop() {
+
   
   Serial.print(zero);
   Serial.print('\t');
@@ -241,37 +222,44 @@ void loop() {
     Serial.print(line[i]);
     Serial.print('\t');
   }
+
+  us_back();
+  us_read();
+  if(us[3]>34){
+    Serial.print("xdxdxd");
+    line_detected=1;
+    if(us[1]<50) dir=90;
+    else if(us[2]<50) dir=270;
+    else dir=180;
+  }
+  Serial.println("US");
+  Serial.print(us[3]);
+  Serial.print("\t");
+  Serial.print(us[2]);
+  Serial.print("\t");
+  Serial.println(us[1]);
   
-  if(line[3]<=120||line[2]<=205||line[1]<=135){
+  if(line[3]>=95||line[2]>=95||line[1]>=115){
     if(dir<50&&dir>300) dir=180;
     else dir=90;
     line_detected=1;
   }
-  if(line[9]<=110||line[8]<=155||line[7]<=130){
+  if(line[9]>=75||line[8]>=60||line[7]>=30){
     if(dir<50&&dir>300) dir=180;
     else dir=270;
-    line_detected=1;
-  }
-  if((line[9]<=110||line[8]<=155||line[7]<=130)&&(line[3]<=120||line[2]<=205||line[1]<=135)){
-    if(dir<90&&dir>270) dir=180;
-    else dir=0;
-    line_detected=1;
-  }
-  if(line[6]<=155||line[5]<=145||line[4]<=175){
-    dir=180;
     line_detected=1;
   }
 
   if(line_detected){
     getOut();
-    if(dir==180) delay(200);
+    if(dir==180) delay(300), Serial.print("FRONT");
     else delay(300);
     turnoff();
     align();
     turnoff();
     delay(100);
-    if(dir==90) last_pos=4, out=1;
-    if(dir==270) last_pos=6, out=1;
+    if(dir==90) last_pos=4, out=1, Serial.print("LEFT");
+    if(dir==270) last_pos=6, out=1, Serial.print("RIGHT");
     line_detected=0;
   }
 
@@ -284,39 +272,40 @@ void loop() {
   Serial.print(IR.Strength);
   Serial.print("\t");
 
-  mag.getHeading(&mx, &my, &mz);
-  float heading = atan2(my, mx);
-  if(heading<0) heading+= 2*M_PI;
-  if(analogRead(1)) reset(heading);
-  heading=heading * 180/M_PI; 
-  current= heading;
+  bno.getEvent(&event);
+  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+  deg= euler.x();
 
-  deg = current-zero;
   if(deg<0) deg+=360;
   if(deg>180) deg-=360;
   Serial.print(deg);
   Serial.print('\t');
   deg*=pk;
-  
+
   dir=ir[IR.Direction];
-  
+
+  if(IR.Direction!=5)aligned=0;
   if(out) if((last_pos==4&&IR.Direction>=5)||(last_pos==6&&IR.Direction<=5)) out=0;
   if(!out){
-    if(IR.Direction==0) nothing();
+    if(IR.Direction==0||IR.Direction==1||IR.Direction==9) nothing();
     else if(IR.Direction==5){
       if(IR.Strength>=90) mov(200,IR.Strength,dir);
       else{
-        align();
+        if(!aligned){
+          align();
+          aligned=1;  
+        }
         turnoff();
       }
     }
-    else mov(200,IR.Strength,dir);
+    else mov(230,IR.Strength,dir);
+    //4-abs(IR.Direction-5)
   }
   
 
-  Serial.print(a);
+  /*Serial.print(a);
   Serial.print('\t');
   Serial.print(b);
   Serial.print('\t');
-  Serial.println(c);
+  Serial.println(c);*/
 }

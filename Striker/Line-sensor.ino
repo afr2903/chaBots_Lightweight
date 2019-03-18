@@ -49,7 +49,7 @@ void loop() {
  
 
   for(int i=7; i<=15; i++){
-    line[i-6]=analogRead(i);
+    line[i-6]=max(line[i-6],analogRead(i));
   }
   for(int i=1; i<=9; i++){
     Serial.print(line[i]);

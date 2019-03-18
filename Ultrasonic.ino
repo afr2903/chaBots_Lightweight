@@ -1,26 +1,28 @@
-const int trigPin = 5;
-const int echoPin = 4;
+int trig[]= {0, 42, 35,5};
+int echo[]= {0, 40, 37,4};
+int us[3];
 // defines variables
 long duration;
 int distance;
 void setup() {
-  pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
-  pinMode(echoPin, INPUT); // Sets the echoPin as an Input
+  for(int i=1; i<=3; i++) pinMode(trig[i],OUTPUT);
+  for(int i=1; i<=3; i++) pinMode(echo[i],INPUT);
   Serial.begin(9600); // Starts the serial communication
 }
 void loop() {
-  // Clears the trigPin
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
-  // Sets the trigPin on HIGH state for 10 micro seconds
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
-  // Reads the echoPin, returns the sound wave travel time in microseconds
-  duration = pulseIn(echoPin, HIGH);
-  // Calculating the distance
-  distance= duration/29/2;
-  // Prints the distance on the Serial Monitor
-  Serial.print("Distance: ");
-  Serial.println(distance);
+  for(int i=1; i<=3; i++){
+    digitalWrite(trig[i], LOW);
+    delayMicroseconds(2);
+    digitalWrite(trig[i], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trig[i], LOW);
+    us[i]= pulseIn(echo[i], HIGH);
+    us[i]= us[i]/29/2;
+  }
+  Serial.print(us[1]);
+  Serial.print("\t");
+  Serial.print(us[2]);
+  Serial.print("\t");
+  Serial.print(us[3]);
+  Serial.println(":v");
 }

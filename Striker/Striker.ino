@@ -5,13 +5,14 @@
 HMC5883L mag;
 
 int16_t mx, my, mz;
-int dir=0, last_pos=0, dis_back=60;
+int dir=0, last_pos=0, dis_back=75;
 float a,b,c, x;
-float r, h=10, w=135;
-bool st;
-float deg=0, pk=1.5, ps=.6;
+float r, h=5, w=135;
+bool st, ball_detected, left, right, aligned;
+float deg=0, pk=.9, ps=.6;
 float zero=0.00f, current;
 
+int tsop[]= {0, 0, 4, 5};
 int trig[]= {0, 42, 35,5};
 int echo[]= {0, 40, 37,4};
 int us[3];
@@ -19,10 +20,15 @@ int us[3];
 bool line_detected;
 long long begin_time=0;
 
-int ir[]={150,200,220,270,330,0,40,110,150,150};
+int ir[]={150,200,220,270,300,0,50,100,150,190};  //New
+//int ir[]={150,180,210,225,310,0,50,120,150,210};
 int line[10];
 
 void mov(int pwm, int strength, int dir){
+  if(dir==-1){
+    turnoff();
+    return;  
+  }
   a=sin((dir-300)*M_PI/180)*pwm;
   b=sin((dir-60)*M_PI/180)*pwm;
   c=sin((dir-180)*M_PI/180)*pwm;
@@ -50,6 +56,12 @@ void mov(int pwm, int strength, int dir){
   c=min(max(c,5),255);
   analogWrite(7,st*c);
   analogWrite(6,(!st)*c); 
+}
+void fwd(){
+  analogWrite(13,0);
+  analogWrite(12,255);
+  analogWrite(2,255);
+  analogWrite(3,0);
 }
 void reset(float heading){
   EEPROM.put(0,heading);
@@ -97,40 +109,53 @@ void mag_read(){
   Serial.print('\t');
 }
 void nothing(){
-  int dif=0;
-  //align();
-  while(true){
-    us_read();
-    //mag_read();
-    // Prints the distance on the Serial Monitor
-    Serial.print(us[1]);
-    Serial.print("\t");
-    Serial.println(us[2]);
-    /*if(us[1]+us[2]<w){
-      Serial.println(":v");
-      //align();
-      us_back();
-      Serial.println(us[3]);
-      dir=180;
-      if(us[3]>dis_back){
-        Serial.println("v:<<<<");
-        mov(180,0,dir);
-      }
-      else{
-        Serial.println(">>>:v");
-        dir=45;
-        turnoff();
-        break; 
-      }
-      continue;
-    }*/
-    if(us[1]+us[2]<w)break;
-    if(abs(us[1]-us[2])<10) break;
-    dir= us[1]<us[2]? 90:270;
-    mov(180,0,dir);
+  dir=-1;
+  us_read();
+  mag_read();
+  // Prints the distance on the Serial Monitor
+  Serial.print(us[1]);
+  Serial.print("\t");
+  Serial.println(us[2]);
+  if(us[1]+us[2]<w){
+    Serial.println(":v");
+    nothing_back();
+    return;
+  }
+  if(us[1]+us[2]<w)return;
+  if(abs(us[1]-us[2])<10){
+    align();
+    turnoff();
+    aligned=1;
+    return;
+  }
+  dir= us[1]<us[2]? 120:240;
+  mov(180,0,dir);
+  /*while(true){
+    dir=-1;
+    us_back();
+    mag_read();
+    if(us[3]<dis_back) break;
+    mov(150,0,180);
   }
   align();
-  turnoff();
+  turnoff();*/
+}
+void nothing_back(){
+  dir=-1;
+  us_back();
+  int d=deg;
+  if(d>5||d<-5) align();
+  Serial.println(us[3]);
+  //dir=180;
+  if(us[3]>dis_back){
+    Serial.println("v:<<<<");
+    mov(120,0,180);
+  }
+  else{
+    align();
+    turnoff();
+    Serial.println(">>>:v");
+  }
 }
 void align(){
   int d=20;
@@ -154,10 +179,14 @@ void align(){
 }
 void getOut(){
   turnoff();
-  delay(100);
   align();
   turnoff();
   delay(100);
+  /*if(dir==180){
+    us_read();
+    if(us[1]<40&&us[2]>40) right=1;
+    if(us[2]<40&&us[1]>40) left=1;
+  }*/
   a=sin((dir-300)*M_PI/180)*180;
   b=sin((dir-60)*M_PI/180)*180;
   c=sin((dir-180)*M_PI/180)*180;
@@ -243,22 +272,26 @@ void loop() {
     Serial.print('\t');
   }
   
-  if(line[3]>=300||line[2]>=300||line[1]>=300){
+  if(line[3]>=210||line[2]>=285||line[1]>=215){
+    Serial.print("LEFT");
     if(dir<50&&dir>300) dir=180;
-    else dir=90;
+    else dir=100;
     line_detected=1;
   }
-  if(line[9]>=300||line[8]>=300||line[7]>=300){
+  if(line[9]>=175||line[8]>=200||line[7]>=165){
+    Serial.print("RIGHT");
     if(dir<50&&dir>300) dir=180;
-    else dir=270;
+    else dir=260;
     line_detected=1;
   }
-  if((line[9]>=300||line[8]>=300||line[7]>=300)&&(line[3]>=300||line[2]>=300||line[1]>=300)){
+  if((line[9]>=175||line[8]>=200||line[7]>=165)&&(line[3]>=210||line[2]>=285||line[1]>=215)){
+    Serial.print("BOTH");
     if(dir<90&&dir>270) dir=180;
     else dir=0;
     line_detected=1;
   }
-  if(line[6]>=300||line[5]>=300||line[4]>=300){
+  if(line[6]>=315||line[5]>=230||line[4]>=305){
+    Serial.print("FRONT");
     dir=180;
     line_detected=1;
   }
@@ -270,6 +303,17 @@ void loop() {
     align();
     turnoff();
     delay(100);
+    if(dir==180){
+      Serial.println("AAAAAAA");
+      begin_time=millis();
+      while((millis()-begin_time)<2000){
+        nothing(); 
+      }
+    }
+    /*if(left) mov(180,0,270);
+    if(right) mov(180,0,90);
+    if(left||right) delay(350);
+    right=0, left=0;*/
     line_detected=0;
   }
   
@@ -293,48 +337,30 @@ void loop() {
   Serial.print('\t');
   deg*=pk;
   
-  r=max(10,130-IR.Strength);
+  r=max(5,130-IR.Strength);
   x= asin(h/r)*180/M_PI;
   dir= ir[IR.Direction]+ (IR.Direction>5? x:-x);
-  if(IR.Direction==5) dir=0;
-
-  //dir=ir[IR.Direction];
-  else last_pos= IR.Direction;
+  last_pos= IR.Direction;
+  if(IR.Direction>=4&&IR.Direction<=7) dir=ir[IR.Direction];
   Serial.println(x);
 
-  if(IR.Direction==0) nothing();
-  else{
-    Serial.println(">>>:v");
-    mov(200,IR.Strength,dir);
+  ball_detected= (analogRead(0)<75&&analogRead(4)<75)||(analogRead(4)<75&&analogRead(5)<75);
+  if(ball_detected){
+    Serial.println("XD");
+    us_read();
+    dir= us[1]+us[2]<w? 0:us[1]<us[2]? max(0,80-us[1]) : 360-max(0,80-us[2]);
+    mov(255,0,dir);
   }
-  
-  /*a=sin((dir-300)*M_PI/180)*200;
-  b=sin((dir-60)*M_PI/180)*200;
-  c=sin((dir-180)*M_PI/180)*200;
-  
-  a>0? st=0: st=1;
-  a=abs(a);
-  st? a+=deg : a-=deg;
-  if(IR.Strength<=120)a-=IR.Strength*ps;
-  a=min(max(a,0),255);
-  analogWrite(13,st*a);
-  analogWrite(12,(!st)*a);
-
-  b>0? st=0: st=1;
-  b=abs(b);
-  st? b+=deg : b-=deg;
-  if(IR.Strength<=120)b-=IR.Strength*ps;
-  b=min(max(b,0),255);
-  analogWrite(2,st*b);
-  analogWrite(3,(!st)*b);
-  
-  c>0? st=0: st=1;
-  c=abs(c);
-  st? c+=deg : c-=deg;
-  if(IR.Strength<=120)c-=IR.Strength*ps;
-  c=min(max(c,0),255);
-  analogWrite(7,st*c);
-  analogWrite(6,(!st)*c);*/
+  else{
+    if(IR.Direction==0||IR.Direction==1||IR.Direction==9){
+      if(!aligned) nothing();
+      else nothing_back();
+    }
+    else{
+      aligned=0;
+      mov(200,IR.Strength,dir);
+    }
+  }
 
   Serial.print(a);
   Serial.print('\t');
