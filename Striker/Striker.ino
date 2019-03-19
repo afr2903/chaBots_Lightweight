@@ -5,11 +5,11 @@
 HMC5883L mag;
 
 int16_t mx, my, mz;
-int dir=0, last_pos=0, dis_back=75;
+int dir=0, last_pos=0, dis_back=60;
 float a,b,c, x;
 float r, h=5, w=135;
-bool st, ball_detected, left, right, aligned;
-float deg=0, pk=.9, ps=.6;
+bool st, ball_detected, left, right, aligned, back;
+float deg=0, pk=.9, ps=.5;
 float zero=0.00f, current;
 
 int tsop[]= {0, 0, 4, 5};
@@ -182,11 +182,9 @@ void getOut(){
   align();
   turnoff();
   delay(100);
-  /*if(dir==180){
-    us_read();
-    if(us[1]<40&&us[2]>40) right=1;
-    if(us[2]<40&&us[1]>40) left=1;
-  }*/
+  /*us_read();
+  if(us[1]<40&&us[2]>40) right=1;
+  if(us[2]<40&&us[1]>40) left=1;*/
   a=sin((dir-300)*M_PI/180)*180;
   b=sin((dir-60)*M_PI/180)*180;
   c=sin((dir-180)*M_PI/180)*180;
@@ -272,25 +270,24 @@ void loop() {
     Serial.print('\t');
   }
   
-  if(line[3]>=210||line[2]>=285||line[1]>=215){
+  if(line[3]>=100||line[2]>=150||line[1]>=120){
     Serial.print("LEFT");
-    if(dir<50&&dir>300) dir=180;
-    else dir=100;
+    //if(dir<50&&dir>300) dir=180;
+    dir=100;
     line_detected=1;
   }
-  if(line[9]>=175||line[8]>=200||line[7]>=165){
+  if(line[9]>=80||line[8]>=100||line[7]>=80){
     Serial.print("RIGHT");
-    if(dir<50&&dir>300) dir=180;
-    else dir=260;
+    //if(dir<50&&dir>300) dir=180;
+    dir=260;
     line_detected=1;
   }
-  if((line[9]>=175||line[8]>=200||line[7]>=165)&&(line[3]>=210||line[2]>=285||line[1]>=215)){
+  if((line[9]>=80||line[8]>=100||line[7]>=80)&&(line[3]>=100||line[2]>=150||line[1]>=120)){
     Serial.print("BOTH");
-    if(dir<90&&dir>270) dir=180;
-    else dir=0;
+    dir=180;
     line_detected=1;
   }
-  if(line[6]>=315||line[5]>=230||line[4]>=305){
+  if(line[6]>=120||line[5]>=120||line[4]>=150){
     Serial.print("FRONT");
     dir=180;
     line_detected=1;
@@ -344,7 +341,7 @@ void loop() {
   if(IR.Direction>=4&&IR.Direction<=7) dir=ir[IR.Direction];
   Serial.println(x);
 
-  ball_detected= (analogRead(0)<75&&analogRead(4)<75)||(analogRead(4)<75&&analogRead(5)<75);
+  ball_detected= ((analogRead(0)<75&&analogRead(4)<75)||(analogRead(4)<75&&analogRead(5)<75))&&IR.Direction==5;
   if(ball_detected){
     Serial.println("XD");
     us_read();
@@ -352,12 +349,32 @@ void loop() {
     mov(255,0,dir);
   }
   else{
-    if(IR.Direction==0||IR.Direction==1||IR.Direction==9){
+    if(IR.Direction==0){
+      back=0;
       if(!aligned) nothing();
       else nothing_back();
     }
+    else if(IR.Direction==1||IR.Direction==2||IR.Direction==8||IR.Direction==9){
+      aligned=0, back=0;
+      if(!back){
+        digitalWrite(trig[3], LOW);
+        delayMicroseconds(2);
+        digitalWrite(trig[3], HIGH);
+        delayMicroseconds(10);
+        digitalWrite(trig[3], LOW);
+        us[3]= pulseIn(echo[3], HIGH);
+        us[3]= us[3]/29/2;
+        if(us[3]<=dis_back){
+          align();
+          turnoff();
+          back=1;
+        }
+        else mov(200,IR.Strength,dir);
+      }
+      else turnoff();
+    }
     else{
-      aligned=0;
+      aligned=0, back=0;
       mov(200,IR.Strength,dir);
     }
   }

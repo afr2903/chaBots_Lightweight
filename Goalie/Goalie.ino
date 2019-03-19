@@ -9,19 +9,29 @@
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
 sensors_event_t event;
 
-int dir=0, last_pos=0, dis_back=60;
+int dir=0, last_pos=0, dis_back=60, cc=0; ;
 float a,b,c, x;
 float r, h=10, w=135;
 bool st, out=0, aligned=0;
-float deg=0, pk=3.5, ps=.5;
+float deg=0, pk=2, ps=.5;
 float zero=0.00f, current;
+bool color[][3]{
+  0,0,0,
+  1,0,0,
+  0,1,0,
+  0,0,1,
+  1,1,0,
+  1,0,1,
+  0,1,1,
+  1,1,1  
+};
 
 int trig[]= {0, 42, 35,5};
 int echo[]= {0, 40, 37,4};
 int us[3];
 
 bool line_detected;
-long long begin_time=0;
+long long begin_time=0, change_color=0;;
 
 int ir[]={150,270,270,270,270,0,90,90,90,90};
 int line[10];
@@ -210,7 +220,10 @@ void setup() {
 
 
 void loop() {
-
+  ++cc%=8;
+  digitalWrite(39,color[cc][0]);
+  digitalWrite(41,color[cc][1]); //Middle
+  digitalWrite(43,color[cc][2]);
   
   Serial.print(zero);
   Serial.print('\t');
@@ -239,21 +252,19 @@ void loop() {
   Serial.print("\t");
   Serial.println(us[1]);
   
-  if(line[3]>=95||line[2]>=95||line[1]>=115){
-    if(dir<50&&dir>300) dir=180;
-    else dir=90;
+  /*if(line[3]>=95||line[2]>=95||line[1]>=115){
+    dir=90;
     line_detected=1;
   }
-  if(line[9]>=75||line[8]>=60||line[7]>=30){
-    if(dir<50&&dir>300) dir=180;
-    else dir=270;
+  if(line[9]>=90||line[8]>=70||line[7]>=30){
+    dir=270;
     line_detected=1;
-  }
+  }*/
 
   if(line_detected){
     getOut();
-    if(dir==180) delay(300), Serial.print("FRONT");
-    else delay(300);
+    if(dir==180) delay(350), Serial.print("FRONT");
+    else delay(250);
     turnoff();
     align();
     turnoff();
