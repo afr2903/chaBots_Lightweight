@@ -5,11 +5,11 @@
 HMC5883L mag;
 
 int16_t mx, my, mz;
-int dir=0, last_pos=0, dis_back=60;
+int dir=0, last_pos=0, dis_back=70, dif;
 float a,b,c, x;
 float r, h=5, w=135;
 bool st, ball_detected, left, right, aligned, back;
-float deg=0, pk=.9, ps=.5;
+float deg=0, pk=.7, ps=.5;
 float zero=0.00f, current;
 
 int tsop[]= {0, 0, 4, 5};
@@ -20,7 +20,7 @@ int us[3];
 bool line_detected;
 long long begin_time=0;
 
-int ir[]={150,200,220,270,300,0,50,100,150,190};  //New
+int ir[]={150,200,220,270,285,0,65,100,150,190};  //New
 //int ir[]={150,180,210,225,310,0,50,120,150,210};
 int line[10];
 
@@ -38,8 +38,8 @@ void mov(int pwm, int strength, int dir){
   st? a+=deg : a-=deg;
   a-=strength*ps;
   a=min(max(a,5),255);
-  analogWrite(13,st*a);
-  analogWrite(12,(!st)*a);
+  analogWrite(12,st*a);
+  analogWrite(13,(!st)*a);
 
   b>0? st=0: st=1;
   b=abs(b);
@@ -54,12 +54,12 @@ void mov(int pwm, int strength, int dir){
   st? c+=deg : c-=deg;
   c-=strength*ps;
   c=min(max(c,5),255);
-  analogWrite(7,st*c);
-  analogWrite(6,(!st)*c); 
+  analogWrite(6,st*c);
+  analogWrite(7,(!st)*c); 
 }
 void fwd(){
-  analogWrite(13,0);
-  analogWrite(12,255);
+  analogWrite(12,0);
+  analogWrite(13,255);
   analogWrite(2,255);
   analogWrite(3,0);
 }
@@ -159,7 +159,7 @@ void nothing_back(){
 }
 void align(){
   int d=20;
-  while(d<-5||d>5){
+  while(d<-10||d>10){
     mag_read();
     //Serial.println(d);
     d=deg;
@@ -167,14 +167,14 @@ void align(){
     deg>0? st=1:st=0;
     deg=abs(deg);
     deg*=2;
-    deg+=60;
+    deg+=20;
     deg=min(deg,255);
-    analogWrite(7,st*deg);
-    analogWrite(6,(!st)*deg);
+    analogWrite(6,st*deg);
+    analogWrite(7,(!st)*deg);
     analogWrite(2,st*deg);
     analogWrite(3,(!st)*deg);
-    analogWrite(13,st*deg);
-    analogWrite(12,(!st)*deg);
+    analogWrite(12,st*deg);
+    analogWrite(13,(!st)*deg);
   }
 }
 void getOut(){
@@ -192,8 +192,8 @@ void getOut(){
   a>0? st=0: st=1;
   a=abs(a);
   a=min(max(a,0),255);
-  analogWrite(13,st*a);
-  analogWrite(12,(!st)*a);
+  analogWrite(12,st*a);
+  analogWrite(13,(!st)*a);
 
   b>0? st=0: st=1;
   b=abs(b);
@@ -204,8 +204,8 @@ void getOut(){
   c>0? st=0: st=1;
   c=abs(c);
   c=min(max(c,0),255);
-  analogWrite(7,st*c);
-  analogWrite(6,(!st)*c);
+  analogWrite(6,st*c);
+  analogWrite(7,(!st)*c);
 }
 
 void setup() {
@@ -218,6 +218,9 @@ void setup() {
   zero*=180/M_PI;
 
   pinMode(A1,INPUT);
+  pinMode(A0,INPUT);
+  pinMode(A4,INPUT);
+  pinMode(A5,INPUT);
   
   pinMode(6,OUTPUT);  //A
   pinMode(7,OUTPUT);
@@ -270,24 +273,24 @@ void loop() {
     Serial.print('\t');
   }
   
-  if(line[3]>=100||line[2]>=150||line[1]>=120){
+  if(line[3]>=100||line[2]>=150||line[1]>=110){
     Serial.print("LEFT");
     //if(dir<50&&dir>300) dir=180;
     dir=100;
     line_detected=1;
   }
-  if(line[9]>=80||line[8]>=100||line[7]>=80){
+  if(line[9]>=80||line[8]>=100||line[7]>=100){
     Serial.print("RIGHT");
     //if(dir<50&&dir>300) dir=180;
     dir=260;
     line_detected=1;
   }
-  if((line[9]>=80||line[8]>=100||line[7]>=80)&&(line[3]>=100||line[2]>=150||line[1]>=120)){
+  if((line[9]>=80||line[8]>=100||line[7]>=100)&&(line[3]>=100||line[2]>=150||line[1]>=110)){
     Serial.print("BOTH");
     dir=180;
     line_detected=1;
   }
-  if(line[6]>=120||line[5]>=120||line[4]>=150){
+  if(line[6]>=100||line[5]>=110||line[4]>=150){
     Serial.print("FRONT");
     dir=180;
     line_detected=1;
@@ -299,7 +302,7 @@ void loop() {
     turnoff();
     align();
     turnoff();
-    delay(100);
+    delay(200);
     if(dir==180){
       Serial.println("AAAAAAA");
       begin_time=millis();
@@ -341,11 +344,21 @@ void loop() {
   if(IR.Direction>=4&&IR.Direction<=7) dir=ir[IR.Direction];
   Serial.println(x);
 
-  ball_detected= ((analogRead(0)<75&&analogRead(4)<75)||(analogRead(4)<75&&analogRead(5)<75))&&IR.Direction==5;
+  ball_detected= (analogRead(0)<75||analogRead(4)<75||analogRead(5)<75)&&IR.Direction==5;
   if(ball_detected){
+    deg*=2.5;
     Serial.println("XD");
     us_read();
-    dir= us[1]+us[2]<w? 0:us[1]<us[2]? max(0,80-us[1]) : 360-max(0,80-us[2]);
+    if(us[1]+us[2]<w) dir=0;
+    else{
+      dif= us[1]-us[2];
+      if(dif<-40) dir= max(0,80-us[1]);
+      else if(dif<-15) dir= max(0,80-us[1]);
+      else if(dif<=15) dir= us[1]<us[2]? max(0,120-us[1]) : 360-max(0,120-us[2]);
+      else if(dif<=40) dir= 360-max(0,80-us[2]);
+      else dir= 360-max(0,80-us[2]);
+    }
+    //dir= us[1]+us[2]<w? 0:us[1]<us[2]? max(0,80-us[1]) : 360-max(0,80-us[2]);
     mov(255,0,dir);
   }
   else{
